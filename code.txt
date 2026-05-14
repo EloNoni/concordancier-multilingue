@@ -1,0 +1,490 @@
+# install.packages(c("shiny", "stringr", "DT", "openxlsx"))
+
+library(shiny)
+library(DT)
+library(openxlsx)
+library(stringi)
+library(showtext)
+library(sysfonts)
+
+# --- POLICES UTF-8 / CHINOIS ---
+windowsFonts(
+  noto = windowsFont("Microsoft YaHei")
+)
+showtext_auto()
+
+# --- TOKENISATION MULTILINGUE UTF-8 ---
+tokeniser_texte <- function(txt) {
+  
+  txt <- tolower(txt)
+  
+  # détection du chinois
+  contient_chinois <- any(
+    grepl(
+      "\\p{Han}",
+      txt,
+      perl = TRUE
+    )
+  )
+  
+  if (contient_chinois) {
+    
+    # segmentation Unicode ICU
+    tokens <- unlist(
+      stringi::stri_split_boundaries(
+        txt,
+        type = "word"
+      )
+    )
+    
+    # garder uniquement lettres/chiffres
+    tokens <- tokens[
+      grepl(
+        "\\p{L}|\\p{N}",
+        tokens,
+        perl = TRUE
+      )
+    ]
+    
+  } else {
+    
+    txt <- gsub(
+      "[^\\p{L}\\p{N}]+",
+      " ",
+      txt,
+      perl = TRUE
+    )
+    
+    tokens <- unlist(
+      strsplit(
+        txt,
+        "\\s+",
+        perl = TRUE
+      )
+    )
+  }
+  
+  tokens[tokens != ""]
+}
+
+
+# --- FREQUENCES ---
+calculer_frequences <- function(tokens, tri) {
+  if (length(tokens) == 0) return(NULL)
+  
+  freq <- table(tokens)
+  
+  df <- data.frame(
+    mot = names(freq),
+    frequence = as.integer(freq),
+    stringsAsFactors = FALSE
+  )
+  
+  if (tri == "alpha") {
+    df <- df[order(df$mot), ]
+  } else {
+    df <- df[order(-df$frequence), ]
+  }
+  
+  df
+}
+
+# --- COLLOCATIONS ---
+calculer_collocations <- function(tokens, mot_cle, fenetre, tri) {
+  if (mot_cle == "" || length(tokens) == 0) return(NULL)
+  
+  idx <- which(tokens == mot_cle)
+  if (length(idx) == 0) return(NULL)
+  
+  colloc <- c()
+  
+  for (i in idx) {
+    contexte <- tokens[max(1, i-fenetre):min(length(tokens), i+fenetre)]
+    contexte <- contexte[contexte != mot_cle]
+    colloc <- c(colloc, contexte)
+  }
+  
+  if (length(colloc) == 0) return(NULL)
+  
+  freq <- table(colloc)
+  
+  df <- data.frame(
+    collocation = names(freq),
+    frequence = as.integer(freq),
+    stringsAsFactors = FALSE
+  )
+  
+  if (tri == "alpha") {
+    df <- df[order(df$collocation), ]
+  } else {
+    df <- df[order(-df$frequence), ]
+  }
+  
+  df
+}
+
+# --- KWIC ---
+generer_kwic <- function(tokens, mot_cle, fenetre) {
+  if (mot_cle == "" || length(tokens) == 0) return(NULL)
+  
+  idx <- which(tokens == mot_cle)
+  if (length(idx) == 0) return(NULL)
+  
+  res <- data.frame(gauche="", mot="", droite="", stringsAsFactors=FALSE)
+  
+  for (i in idx) {
+    gauche <- paste(tokens[max(1,i-fenetre):(i-1)], collapse=" ")
+    droite <- paste(tokens[(i+1):min(length(tokens), i+fenetre)], collapse=" ")
+    res <- rbind(res, data.frame(gauche, mot=mot_cle, droite))
+  }
+  
+  res
+}
+
+# --- ALIGNEMENT ---
+aligner_corpus <- function(txt1, txt2) {
+  if (length(txt1) == 0 || length(txt2) == 0) return(NULL)
+  
+  n <- min(length(txt1), length(txt2))
+  
+  data.frame(
+    Langue1 = txt1[1:n],
+    Langue2 = txt2[1:n],
+    stringsAsFactors = FALSE
+  )
+}
+
+# --- UI ---
+ui <- fluidPage(
+  
+  tags$head(tags$style(HTML("
+    body { background-color: #fff0f5; font-family: Book Antica; }
+    
+    .boite {
+      border:1px solid #f4c2c2;
+      padding:15px;
+      margin:10px;
+      background:white;
+      border-radius:12px;
+      box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+    }
+    
+    h2, h4 { color:#c41b6f; }
+    
+    .btn {
+      background-color: #d63c7c;
+      border: none;
+      color: white;
+    }
+    
+    .btn:hover {
+      background-color: #d63384;
+    }
+    
+    .shiny-file-input-progress {
+  display: none !important;
+}
+  "))),
+  
+  titlePanel("📖 Concordancier par Eloïse"),
+  
+  fluidRow(
+    
+    column(4,
+           div(class="boite",
+               
+               h4("Fichiers"),
+               
+               fileInput("file", "Corpus",
+                         buttonLabel = "Parcourir...",
+                         placeholder = "Aucun fichier sélectionné"),
+               actionButton("remove_file", "Supprimer le fichier"),
+               
+               
+               fileInput("file2", "Corpus parallèle",
+                         buttonLabel = "Parcourir...",
+                         placeholder = "Aucun fichier sélectionné"),
+               actionButton("remove_file", "Supprimer le fichier"),
+               
+               
+               fileInput("stopfile", "Stoplist",
+                         buttonLabel = "Parcourir...",
+                         placeholder = "Aucun fichier sélectionné"),
+               actionButton("remove_file", "Supprimer le fichier"),
+               
+               textInput("search", "Mot-clé"),
+               sliderInput("window", "Fenêtre", 1, 5, 2),
+               
+               selectInput("sort", "Tri",
+                           choices=c("Fréquence"="freq",
+                                     "Ordre alphabétique"="alpha")),
+               
+               
+               actionButton("run","Analyser"),
+               br(), br(),
+               downloadButton("export", "Exporter en Excel")
+           )
+    ),
+    
+    column(8,
+           
+           div(class="boite",
+               h4("Fréquences"),
+               plotOutput("graph_freq", height="400px"),
+               plotOutput("pseudo_cloud", height="300px"),
+               DTOutput("freq")
+           ),
+           
+           div(class="boite",
+               h4("Collocations"),
+               plotOutput("graph_colloc", height="400px"),
+               DTOutput("colloc")
+           ),
+           
+           div(class="boite",
+               h4("KWIC"),
+               DTOutput("kwic")
+           ),
+           
+           div(class="boite",
+               h4("Alignement"),
+               DTOutput("align")
+           )
+    )
+  )
+)
+
+# --- SERVER ---
+server <- function(input, output, session) {
+  
+  # --- FONCTION DATATABLE FR ---
+  datatable_fr <- function(df) {
+    datatable(
+      df,
+      options = list(
+        language = list(
+          url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json"
+        )
+      )
+    )
+  }
+  
+  corpus_file <- reactiveVal(NULL)
+  corpus2_file <- reactiveVal(NULL)
+  stop_file <- reactiveVal(NULL)
+  
+  observeEvent(input$file, { corpus_file(input$file) })
+  observeEvent(input$file2, { corpus2_file(input$file2) })
+  observeEvent(input$stopfile, { stop_file(input$stopfile) })
+  
+  observeEvent(input$remove_file, {
+    corpus_file(NULL)
+    session$sendInputMessage("file", list(value=NULL))
+  })
+  
+  observeEvent(input$remove_file2, {
+    corpus2_file(NULL)
+    session$sendInputMessage("file2", list(value=NULL))
+  })
+  
+  observeEvent(input$remove_stop, {
+    stop_file(NULL)
+    session$sendInputMessage("stopfile", list(value=NULL))
+  })
+  
+  output$status_file <- renderText({
+    if (is.null(corpus_file())) "Aucun corpus chargé"
+    else paste("Chargé :", corpus_file()$name)
+  })
+  
+  tokens_data <- eventReactive(input$run, {
+    
+    req(corpus_file())
+    
+    # lecture du corpus UTF-8
+    texte <- paste(
+      readLines(
+        corpus_file()$datapath,
+        encoding = "UTF-8",
+        warn = FALSE
+      ),
+      collapse = " "
+    )
+    
+    # tokenisation
+    tokens <- tokeniser_texte(texte)
+    
+    # sécurité
+    if (length(tokens) == 0) {
+      return(character(0))
+    }
+    
+    # stoplist UTF-8
+    if (!is.null(stop_file())) {
+      
+      stopwords <- readLines(
+        stop_file()$datapath,
+        encoding = "UTF-8",
+        warn = FALSE
+      )
+      
+      stopwords <- trimws(tolower(stopwords))
+      
+      tokens <- tokens[!tokens %in% stopwords]
+    }
+    
+    tokens
+  })
+  
+  output$freq <- renderDT({
+    df <- calculer_frequences(tokens_data(), input$sort)
+    if (is.null(df)) return(NULL)
+    datatable_fr(df)
+  })
+  
+  output$graph_freq <- renderPlot({
+    df <- calculer_frequences(tokens_data(), "freq")
+    if (is.null(df)) return(NULL)
+    df <- head(df, 10)
+    par(mar=c(8,4,2,1))
+    barplot(
+      df$frequence,
+      names.arg = df$mot,
+      las = 2,
+      col = "pink",
+      family = "noto",
+      cex.names = 1.1
+    )
+  })
+  
+  output$pseudo_cloud <- renderPlot({
+    
+    df <- calculer_frequences(tokens_data(), "freq")
+    
+    if (is.null(df)) return(NULL)
+    
+    df <- head(df, 40)
+    
+    sizes <- 1 + (df$frequence / max(df$frequence)) * 4
+    
+    par(family = "noto")
+    
+    plot(
+      0, 0,
+      type = "n",
+      xlim = c(0,1),
+      ylim = c(0,1),
+      xaxt = "n",
+      yaxt = "n",
+      xlab = "",
+      ylab = "",
+      bty = "n"
+    )
+    
+    set.seed(1)
+    
+    for (i in 1:nrow(df)) {
+      
+      text(
+        runif(1),
+        runif(1),
+        labels = df$mot[i],
+        cex = sizes[i],
+        col = "darkred",
+        family = "noto"
+      )
+    }
+  })
+  
+  output$colloc <- renderDT({
+    datatable_fr(calculer_collocations(tokens_data(),
+                                       input$search,
+                                       input$window,
+                                       input$sort))
+  })
+  
+  output$graph_colloc <- renderPlot({
+    df <- calculer_collocations(tokens_data(),
+                                input$search,
+                                input$window,
+                                "freq")
+    if (is.null(df)) return(NULL)
+    df <- head(df, 10)
+    par(mar=c(8,4,2,1))
+    barplot(
+      df$frequence,
+      names.arg = df$collocation,
+      las = 2,
+      col = "pink",
+      family = "noto",
+      cex.names = 1.1
+    )
+  })
+  
+  output$kwic <- renderDT({
+    datatable_fr(generer_kwic(tokens_data(),
+                              input$search,
+                              input$window))
+  })
+  
+  output$align <- renderDT({
+    if (is.null(corpus2_file())) return(NULL)
+    
+    txt1 <- readLines(corpus_file()$datapath)
+    txt2 <- readLines(corpus2_file()$datapath)
+    
+    datatable_fr(aligner_corpus(txt1, txt2))
+  })
+  
+  output$export <- downloadHandler(
+    filename = function() "resultats.xlsx",
+    content = function(file) {
+      
+      wb <- createWorkbook()
+      
+      # --- FREQUENCES ---
+      freq <- calculer_frequences(tokens_data(), input$sort)
+      if (!is.null(freq)) {
+        addWorksheet(wb, "Frequences")
+        writeData(wb, "Frequences", freq)
+      }
+      
+      # --- COLLOCATIONS ---
+      colloc <- calculer_collocations(tokens_data(),
+                                      input$search,
+                                      input$window,
+                                      input$sort)
+      if (!is.null(colloc)) {
+        addWorksheet(wb, "Collocations")
+        writeData(wb, "Collocations", colloc)
+      }
+      
+      # --- KWIC ---
+      kwic <- generer_kwic(tokens_data(),
+                           input$search,
+                           input$window)
+      if (!is.null(kwic)) {
+        addWorksheet(wb, "KWIC")
+        writeData(wb, "KWIC", kwic)
+      }
+      
+      # --- ALIGNEMENT ---
+      if (!is.null(corpus2_file())) {
+        txt1 <- readLines(corpus_file()$datapath)
+        txt2 <- readLines(corpus2_file()$datapath)
+        
+        align <- aligner_corpus(txt1, txt2)
+        
+        if (!is.null(align)) {
+          addWorksheet(wb, "Alignement")
+          writeData(wb, "Alignement", align)
+        }
+      }
+      
+      # --- SAUVEGARDE ---
+      saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+}
+
+shinyApp(ui, server)
