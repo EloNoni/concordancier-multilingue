@@ -1,0 +1,3 @@
+Hello everyone.
+This is a sample corpus.
+The concordancer works in UTF-8.

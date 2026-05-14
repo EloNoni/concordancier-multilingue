@@ -1,0 +1,3 @@
+Bonjour à tous.
+Ceci est un corpus d'exemple.
+Le concordancier fonctionne en UTF-8.
