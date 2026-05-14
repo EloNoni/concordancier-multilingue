@@ -1,26 +1,26 @@
 # Concordancier-multilingue
-Application de concordancier multilingue développée en vibe-coding en R et Shiny dans le cadre d’un travail de fin d'études de Master de spécialisation en linguistique appliquée
+Application de concordancier multilingue développée en vibe-coding en R et Shiny dans le cadre d’un travail de fin d'études de Master de spécialisation en linguistique appliquée.
 
-## Objectif scientifique
+## Objectif
 
-Ce concordancier a été développé dans le cadre d’un travail de recherche en linguistique de corpus et traitement automatique des langues (TAL), afin d’explorer :
+Ce concordancier a été développé dans le cadre d’un travail de recherche en linguistique de corpus et traitement automatique du langage (TAL), afin d’explorer :
 
-- les fréquences lexicales,
-- les collocations,
-- les mots-clés en contexte (KWIC),
-- l’alignement bilingue,
+- Les fréquences lexicales 
+- Les collocations 
+- Visualisation en contexte (KWIC) 
+- L’alignement bilingue
 
 ---
 
 ## Fonctionnalités
 
-- Analyse de fréquences
-- Concordancier KWIC
-- Extraction des collocations
-- Alignement de corpus parallèles
-- Gestion UTF-8
-- Support du chinois via ICU
-- Export Excel des résultats
+- Analyse de fréquences 
+- Concordancier KWIC 
+- Extraction des collocations 
+- Génération de graphes 
+- Nuage de mots 
+- Alignement de corpus parallèles 
+- Export des résultats en Excel
 
 ---
 
@@ -33,3 +33,7 @@ Ce concordancier a été développé dans le cadre d’un travail de recherche e
 - stringi
 - showtext
 - sysfonts
+
+## Format de texte supporté
+
+UTF-8.
