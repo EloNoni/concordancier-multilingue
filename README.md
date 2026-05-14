@@ -47,7 +47,7 @@ UTF-8.
 ### 1. Cloner le repository
 
 ```bash
-git clone https://github.com/USERNAME/concordancier-memoire.git
+git clone https://github.com/EloNoni/concordancier-multilingue.git
 ```
 
 ### 2. Installer les dépendances
