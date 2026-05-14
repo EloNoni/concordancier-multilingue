@@ -34,6 +34,31 @@ Ce concordancier a été développé dans le cadre d’un travail de recherche e
 - showtext
 - sysfonts
 
+---
+
 ## Format de texte supporté
 
 UTF-8.
+
+---
+
+## Installation
+
+### 1. Cloner le repository
+
+```bash
+git clone https://github.com/EloNoni/concordancier-multilingue.git
+```
+
+### 2. Installer les dépendances
+
+```r
+source("requirements.R")
+```
+
+### 3. Lancer l'application
+
+```r
+shiny::runApp()
+
+
