@@ -7,7 +7,7 @@ Ce concordancier a été développé dans le cadre d’un travail de recherche e
 
 - Les fréquences lexicales 
 - Les collocations 
-- Visualisation en contexte (KWIC) 
+- La visualisation de mots-clés en contexte (KWIC) 
 - L’alignement bilingue
 
 ---
